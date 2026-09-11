@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-09-11
+
+### Fixed
+
+- `package-lock.json` had accumulated ~225 dependency entries resolved against
+  `registry.npmmirror.com` (a third-party npm mirror) instead of the official
+  `registry.npmjs.org`, apparently from a local `npm install` that picked up a mirror
+  configuration at some point. GitHub Actions runners refuse to fetch packages from a registry
+  other than the one npm is configured to use, which broke `npm ci` in the publish workflow when
+  tagging `v0.1.2` (that tag's workflow run failed before reaching `npm publish`; no `0.1.2`
+  package was ever published). Regenerated the lockfile from a clean install against the
+  official registry; `v0.1.2` is skipped in favor of this release.
+
 ## [0.1.2] - 2026-09-11
 
 Security and performance review, prompted by a request to audit the codebase for
@@ -92,6 +105,7 @@ Initial release.
 - TLS support (one-way and mutual TLS, plus an `insecureSkipVerify` escape hatch for testing).
 - Dual ESM + CommonJS package output with bundled TypeScript declarations.
 
+[0.1.3]: https://github.com/MuYiYong/nebula-typescript/releases/tag/v0.1.3
 [0.1.2]: https://github.com/MuYiYong/nebula-typescript/releases/tag/v0.1.2
 [0.1.1]: https://github.com/MuYiYong/nebula-typescript/releases/tag/v0.1.1
 [0.1.0]: https://github.com/MuYiYong/nebula-typescript/releases/tag/v0.1.0
