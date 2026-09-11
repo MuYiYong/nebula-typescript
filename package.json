@@ -1,0 +1,76 @@
+{
+  "name": "@mygraph/nebula-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for NebulaGraph 5.3 (gRPC + Protobuf)",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "proto:gen": "bash scripts/gen-proto.sh",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "test": "vitest run --exclude \"**/*.integration.test.ts\"",
+    "test:watch": "vitest",
+    "test:integration": "vitest run -c vitest.integration.config.ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "nebula",
+    "nebulagraph",
+    "graph-database",
+    "grpc",
+    "typescript"
+  ],
+  "author": "",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MuYiYong/nebula-typescript.git"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "1.13.4",
+    "@grpc/proto-loader": "0.7.13",
+    "long": "5.3.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.18.0",
+    "@types/node": "22.10.5",
+    "eslint": "9.18.0",
+    "prettier": "3.4.2",
+    "ts-proto": "2.4.1",
+    "tsup": "8.3.5",
+    "typescript": "5.7.3",
+    "typescript-eslint": "8.19.1",
+    "vitest": "2.1.8"
+  }
+}
