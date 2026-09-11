@@ -117,6 +117,12 @@ database drivers, e.g. `pg`/`mysql2`) rather than rejecting immediately. Set
 
 ## TLS
 
+**Security note:** without a `tls` option, the connection is **unencrypted**, and the
+`Authenticate` call sends your username/password in cleartext over the network (matching the
+behavior of the reference Go/Python/Java SDKs). Always configure `tls` when connecting over any
+network you do not fully control (i.e. anything other than `localhost` or a private, trusted
+link to `graphd`).
+
 ```typescript
 import { readFileSync } from 'node:fs';
 

@@ -15,7 +15,7 @@ import { getSchemaName } from './graphSchema.js';
 import type { PathMetaData } from './pathMeta.js';
 import { decodePathAdjHeader } from './pathMeta.js';
 import type { PropVectorIndex } from './propVectorIndex.js';
-import type { TypeSchema } from './typeSchema.js';
+import type { PropSchema, TypeSchema } from './typeSchema.js';
 import { VectorType } from './vectorContentType.js';
 import {
   asInt64,
@@ -162,7 +162,7 @@ export function decodeNodeFlatValue(
   rowIndex: number,
   propVectorIndex: PropVectorIndex,
   recurse: RecurseDecodeFn,
-  propSchemaLookup: (graphId: number, nodeTypeId: number) => ReadonlyMap<string, TypeSchema>,
+  propSchemaLookup: (graphId: number, nodeTypeId: number) => ReadonlyMap<string, PropSchema>,
 ): NebulaNode {
   const headerLen = 16; // nodeId(8) + graphId(4) + padding(4)
   const header = v.vectorData.subarray(rowIndex * headerLen, rowIndex * headerLen + headerLen);
@@ -183,7 +183,7 @@ export function decodeNodeFlatValue(
   const properties = new Map<string, NebulaValue>();
   for (const [propName, vectorIndex] of elementProps) {
     const nested = v.nestedVectors[vectorIndex];
-    const schema = propSchemas.get(propName);
+    const schema = propSchemas.get(propName)?.schema;
     if (!nested || !schema) {
       throw new Error(`Node value: missing nested vector or schema for prop ${propName}`);
     }
@@ -200,7 +200,7 @@ export function decodeEdgeFlatValue(
   rowIndex: number,
   propVectorIndex: PropVectorIndex,
   recurse: RecurseDecodeFn,
-  propSchemaLookup: (graphId: number, edgeTypeId: number) => ReadonlyMap<string, TypeSchema>,
+  propSchemaLookup: (graphId: number, edgeTypeId: number) => ReadonlyMap<string, PropSchema>,
 ): NebulaEdge {
   const headerLen = 32; // srcId(8)+dstId(8)+rank(8)+graphId(4)+edgeTypeId(4)
   const header = v.vectorData.subarray(rowIndex * headerLen, rowIndex * headerLen + headerLen);
@@ -230,7 +230,7 @@ export function decodeEdgeFlatValue(
   const properties = new Map<string, NebulaValue>();
   for (const [propName, vectorIndex] of elementProps) {
     const nested = v.nestedVectors[vectorIndex];
-    const schema = propSchemas.get(propName);
+    const schema = propSchemas.get(propName)?.schema;
     if (!nested || !schema) {
       throw new Error(`Edge value: missing nested vector or schema for prop ${propName}`);
     }

@@ -38,7 +38,7 @@ import type { PathMetaData } from './pathMeta.js';
 import type { PropVectorIndex } from './propVectorIndex.js';
 import { decodePropVectorIndex } from './propVectorIndex.js';
 import { decodeDecimalFlatValue, decodeStringFlatValue } from './stringValue.js';
-import type { GraphElementPropsByGraph, TypeSchema } from './typeSchema.js';
+import type { GraphElementPropsByGraph, PropSchema, TypeSchema } from './typeSchema.js';
 import {
   registerAnyValueDecoder,
   registerElementValueDecoder,
@@ -170,14 +170,15 @@ function decodeElementValue(
   const propSchemaLookup = (
     graphId: number,
     elementTypeId: number,
-  ): ReadonlyMap<string, TypeSchema> => {
+  ): ReadonlyMap<string, PropSchema> => {
     const props = schema.graphElementProps.get(graphId)?.get(elementTypeId);
     if (!props) {
       throw new Error(`element type not found: graphId=${graphId}, elementTypeId=${elementTypeId}`);
     }
-    const out = new Map<string, TypeSchema>();
-    for (const [name, propSchema] of props) out.set(name, propSchema.schema);
-    return out;
+    // Returned directly (no copy): `props` is immutable and invariant for a
+    // given (graphId, elementTypeId) across every row in this column, so
+    // there is nothing to gain from rebuilding a derived Map per row.
+    return props;
   };
 
   if (isNode) {

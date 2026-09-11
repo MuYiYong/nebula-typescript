@@ -49,6 +49,19 @@ describe.skipIf(!PASSWORD)('Connection integration', () => {
     expect(row.toPrimitive()).toEqual({ a: 1, b: 'hello', c: true });
   });
 
+  it('rowSize() reports the row count without consuming the row cursor', async () => {
+    const result = await conn.execute('RETURN 1 AS a UNION RETURN 2 AS a UNION RETURN 3 AS a');
+    result.raiseOnError();
+    // Calling rowSize() must not prevent subsequently reading every row.
+    expect(result.rowSize()).toBe(3);
+    expect(result.rowSize()).toBe(3); // idempotent
+    const values: unknown[] = [];
+    while (result.hasNext()) {
+      values.push(result.next().toPrimitive());
+    }
+    expect(values).toHaveLength(3);
+  });
+
   it('decodes a List literal', async () => {
     const result = await conn.execute('RETURN [1,2,3] AS lst');
     result.raiseOnError();

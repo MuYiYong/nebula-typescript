@@ -83,7 +83,7 @@ interface Waiter {
 export class ConnectionPool {
   private readonly options: ConnectionPoolOptions;
   private readonly freeConnections: PooledConnection[] = [];
-  private readonly allConnections = new Set<PooledConnection>();
+  private readonly allConnections = new Map<Connection, PooledConnection>();
   private readonly waiters: Waiter[] = [];
   private hostIndex = -1;
   private openCount = 0;
@@ -160,7 +160,7 @@ export class ConnectionPool {
         }
       }
       const pooled: PooledConnection = { connection, createdAt: Date.now() };
-      this.allConnections.add(pooled);
+      this.allConnections.set(connection, pooled);
       this.openCount++;
       return pooled;
     } finally {
@@ -169,7 +169,7 @@ export class ConnectionPool {
   }
 
   private async destroyConnection(pooled: PooledConnection): Promise<void> {
-    this.allConnections.delete(pooled);
+    this.allConnections.delete(pooled.connection);
     this.openCount--;
     try {
       await pooled.connection.close();
@@ -240,7 +240,7 @@ export class ConnectionPool {
 
   /** Returns a connection to the pool for reuse. */
   async release(connection: Connection): Promise<void> {
-    const pooled = Array.from(this.allConnections).find((p) => p.connection === connection);
+    const pooled = this.allConnections.get(connection);
     if (!pooled) {
       return; // not tracked by this pool (e.g. already destroyed)
     }
@@ -315,6 +315,6 @@ export class ConnectionPool {
       waiter.reject(new PoolExhaustedError(0));
     }
     this.waiters.length = 0;
-    await Promise.all(Array.from(this.allConnections).map((p) => this.destroyConnection(p)));
+    await Promise.all(Array.from(this.allConnections.values()).map((p) => this.destroyConnection(p)));
   }
 }

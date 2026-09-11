@@ -65,6 +65,11 @@ function applyOffsetUtc(
   fields: { year: number; month: number; day: number; hour: number; minute: number; sec: number; microsec: number },
   offsetSec: number,
 ): { year: number; month: number; day: number; hour: number; minute: number; sec: number; microsec: number } {
+  // No shift needed for UTC (the common case for servers/datasets configured
+  // with timezone offset 0) — skip constructing a Date entirely.
+  if (offsetSec === 0) {
+    return fields;
+  }
   const ms = Date.UTC(
     fields.year,
     fields.month - 1,

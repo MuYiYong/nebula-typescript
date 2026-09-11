@@ -132,9 +132,7 @@ class ResultTableAdapter implements ExecutionResult {
   }
 
   rowSize(): number {
-    let count = 0;
-    for (const _ of this.table) count++;
-    return count;
+    return this.table.rowCountHint();
   }
 
   hasNext(): boolean {

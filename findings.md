@@ -71,5 +71,81 @@ NebulaGraph 5.3（Java/Go/Python 三个官方 SDK release-5.3 分支验证一致
 - Java blockWhenExhausted 默认 false 令人意外，TS 应选择更符合直觉的默认（例如默认等待，超时后拒绝），并在文档明确说明
 - 三者均未做自动重试（即使 isRetryable() 已分类），TS 可考虑作为增值特性（但非本次范围强制项，先对齐功能，重试作为可选增强）
 
-## 状态
-Phase 1 研究完成，进入 Phase 2 架构设计。
+## 状态（研究阶段）
+Phase 1 研究完成，进入 Phase 2 架构设计。SDK 实现已在此后完成并发布（见 task_plan.md / progress.md）。
+
+---
+
+# 安全与性能审查结论（2026-09-11）
+
+## 方法
+两个子代理并行审查（安全面 + 性能面），随后逐项亲自读代码核实，只修复验证为真实存在的问题。
+
+## 确认为真实问题（将修复）
+
+### 安全
+1. **[中] anyValue.ts List/Set 解码的 null bitmap 分配放大攻击面**
+   - 位置：src/decode/anyValue.ts `readNullBitmapFlags()` + List/Set 分支
+   - 问题：`size` 来自服务器（List: uint16 最大65535；Set: uint32 最大~42亿），`bitSize=ceil(size/8)`
+     用于 `r.readN(bitSize)`（有边界检查），但检查通过后才做 `boolean[size]` 数组分配+循环。
+     由于 gRPC 接收消息大小设置为 -1（无限制），恶意/异常服务器发送约536MB真实字节即可让
+     bitSize校验通过，进而触发42亿次数组push——在真正开始读元素数据前就可能OOM或长时间阻塞。
+   - 验证：亲自读代码确认 readN 在数组分配*之前*调用，且顺序验证了 Set 的 size 是 uint32（不是 List 的 uint16），
+     放大倍数确实存在（536MB输入 -> 试图分配42亿元素数组）
+   - 修复方案：在分配数组前加合理性检查（size 与 r.remaining() 的比例关系），避免用声明的巨大 size
+     驱动内存分配
+
+2. **[中] 默认传输未加密时明文发送密码，缺少显式警告**
+   - 位置：src/connection/connection.ts buildChannelCredentials() 默认走 grpc.credentials.createInsecure()
+   - 验证：确认无 tls 配置时确实走明文通道，且 README/API.md 均未显式提示这一点
+   - 修复方案：README 增加安全提示；代码层不强制拦截（保持与参考SDK行为一致和向后兼容），
+     但要让用户知情
+
+### 性能 / 正确性
+3. **[高，正确性bug] ExecutionResult.rowSize() 会消费迭代器游标**
+   - 位置：src/connection/connection.ts ResultTableAdapter.rowSize()
+   - 问题：`for (const _ of this.table) count++` 会推进 ResultTable 内部的 batchIndex/currentBatchRowIndex，
+     调用 rowSize() 后再调用 next()/迭代会拿不到完整数据（表已被"消费"）
+   - 验证：读 resultTable.ts 确认 RowBatch.numRecords() 已存在且是 O(1)（读 commonMetaData.numRecords），
+     ResultTable 可以直接提供不消费游标的求和方法，但当前没有暴露
+   - 修复方案：ResultTable 增加 rowCountHint()方法（对 batches 的 numRecords() 求和，不推进游标），
+     ResultTableAdapter.rowSize() 改用它
+
+4. **[中] connectionPool.ts release() 每次 O(n) 扫描 + 数组分配**
+   - 位置：src/pool/connectionPool.ts release() `Array.from(this.allConnections).find(...)`
+   - 验证：确认 allConnections 是 Set<PooledConnection>，release 每次转数组再线性查找
+   - 修复方案：改用 Map<Connection, PooledConnection>，release 变 O(1)
+
+5. **[中] Node/Edge 解码每行重建 propSchemas Map**
+   - 位置：src/decode/values.ts decodeElementValue() 内的 propSchemaLookup 闭包 +
+     src/decode/compositeValue.ts decodeNodeFlatValue/decodeEdgeFlatValue
+   - 验证：确认 propSchemaLookup 每次调用都 new Map() 并全量拷贝 props，而这个结果对
+     同一 (graphId, elementTypeId) 是不变的，且该函数每行调用一次
+   - 修复方案：改变 propSchemaLookup 的返回类型为原始的 ReadonlyMap<string, PropSchema>
+     （已存在于 typeSchema 中，无需拷贝），调用侧改为 `.get(name)?.schema`，完全消除每行的 Map 拷贝
+
+6. **[低] ZonedTime/ZonedDatetime 每值构造 Date 对象，即使 offset=0**
+   - 位置：src/decode/basicValue.ts applyOffsetUtc()
+   - 验证：确认无条件构造 new Date()，即使 offsetSec===0（UTC，无需偏移）
+   - 修复方案：offsetSec===0 时直接返回原始字段，跳过 Date 构造
+
+## 修复实施记录（2026-09-11）
+
+全部6项已修复，详见各自 commit。npm audit 补充说明：devDependency 保守升级
+（tsup 8.3.5→8.5.1, vitest 2.1.8→2.1.9，均为非破坏性 patch/minor 版本），修复了 8 个中的 1 个。
+剩余 7 个需要 vitest 大版本跳到 5.0.0（breaking change）才能修复，鉴于：
+(a) 全部在 devDependencies，`npm audit --omit=dev` 确认发布产物 0 漏洞；
+(b) 剩余的漏洞利用场景是"本机同时跑 Vitest dev server + 访问恶意网站"，与本 SDK 实际
+使用场景（CI/Node服务端）无关；
+(c) 发版前不宜为此引入测试框架大版本升级的兼容性风险；
+故不做进一步升级，作为已知、可接受的风险记录在案。
+- enqueue() 的 Promise 链：两份报告都承认这不是经典内存泄漏（只持有最新一节引用，V8 正常GC），
+  微任务开销可忽略，改造成本大于收益，不修
+- geography.ts 的 numCoords/loops 循环：每次迭代都单独走 readFloat64LE()->readN(8)（有边界检查），
+  代价与实际收到字节数成正比，不存在"声明超大数字空转"的放大效应，风险远低于 anyValue.ts 的情况，不修
+- npm audit 的8个漏洞：全部在devDependencies（vitest/vite/esbuild/tsup链），`npm audit --omit=dev`
+  验证为0（已用真实命令确认），不影响发布产物；仍会顺手 `npm audit fix` 升级（低风险、非破坏性）
+- BASIC_TYPE_SIZE用Map.get查表 / bytesReader每次读取都subarray：确实有微小开销，但影响远小于
+  上述已列问题，且改动面较大（涉及多处签名），本轮不做，记录为未来优化候选
+- connectionPool.acquire()的for(;;)循环无重试上限：真实存在但影响面是可用性而非安全崩溃，
+  且已有pingTimeout做超时保护，非本轮阻塞项，记录为未来改进候选

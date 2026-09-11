@@ -30,16 +30,43 @@ import {
   type NebulaValueOrNull,
 } from '../types/value.js';
 
-function readNullBitmapFlags(r: BytesReader, size: number): boolean[] {
-  const bitSize = size % 8 !== 0 ? Math.floor(size / 8) + 1 : size / 8;
-  const bytes = r.readN(bitSize);
-  const flags: boolean[] = [];
-  for (let i = 0; i < size; i++) {
-    const byteIdx = Math.floor(i / 8);
-    const bitIdx = i % 8;
-    flags.push((bytes[byteIdx]! & (1 << bitIdx)) !== 0);
+/**
+ * Hard cap on the element count declared in a wire-level List/Set/Record/
+ * Node/Edge/Path header before we allocate anything driven by that count.
+ *
+ * Rationale: these counts come directly from the server's response with no
+ * independent corroboration until the *following* bytes are actually read.
+ * `Set`'s count field is a uint32 (up to ~4.29 billion); without this cap, a
+ * malformed or malicious response need only supply enough real bytes to
+ * satisfy the null-bitmap length check (~size/8 bytes) to make the decoder
+ * attempt an allocation/loop of `size` iterations — e.g. ~536MB of input
+ * triggering a 4.29-billion-element array/loop, which can exhaust memory or
+ * block the event loop well before the (bounds-checked) per-element reads
+ * would eventually fail. No legitimate NebulaGraph value is expected to
+ * contain anywhere near this many elements.
+ */
+const MAX_COMPOSITE_ELEMENT_COUNT = 10_000_000;
+
+function checkElementCount(size: number, context: string): void {
+  if (size > MAX_COMPOSITE_ELEMENT_COUNT) {
+    throw new Error(
+      `decodeAnyCompositeValue: ${context} declares ${size} elements, exceeding the ` +
+        `safety limit of ${MAX_COMPOSITE_ELEMENT_COUNT} (malformed or malicious response?)`,
+    );
   }
-  return flags;
+}
+
+/** Reads a null-bitmap of `size` bits (1 = present) without materializing a
+ * `boolean[]` array; returns the raw bitmap bytes plus a bit-test helper. */
+function readNullBitmap(r: BytesReader, size: number): Buffer {
+  const bitSize = size % 8 !== 0 ? Math.floor(size / 8) + 1 : size / 8;
+  return r.readN(bitSize);
+}
+
+function isBitPresent(bitmap: Buffer, index: number): boolean {
+  const byteIdx = index >>> 3;
+  const bitIdx = index & 7;
+  return (bitmap[byteIdx]! & (1 << bitIdx)) !== 0;
 }
 
 export function decodeAnyCompositeValue(
@@ -70,10 +97,13 @@ export function decodeAnyCompositeValue(
     case ColumnType.List: {
       const subType = lookupColumnType(r.readUint8());
       const size = r.readUint16LE();
-      const present = readNullBitmapFlags(r, size);
+      checkElementCount(size, 'List');
+      const bitmap = readNullBitmap(r, size);
       const values: NebulaValueOrNull[] = [];
       for (let i = 0; i < size; i++) {
-        values.push(present[i] ? decodeAnyCompositeValue(ctx, r, subType) : nullValue(subType));
+        values.push(
+          isBitPresent(bitmap, i) ? decodeAnyCompositeValue(ctx, r, subType) : nullValue(subType),
+        );
       }
       const data: NebulaList = { values: values as readonly NebulaValue[] };
       return { type: ColumnType.List, isNull: false, data };
@@ -82,10 +112,13 @@ export function decodeAnyCompositeValue(
     case ColumnType.Set: {
       const subType = lookupColumnType(r.readUint8());
       const size = r.readUint32LE();
-      const present = readNullBitmapFlags(r, size);
+      checkElementCount(size, 'Set');
+      const bitmap = readNullBitmap(r, size);
       const values: NebulaValueOrNull[] = [];
       for (let i = 0; i < size; i++) {
-        values.push(present[i] ? decodeAnyCompositeValue(ctx, r, subType) : nullValue(subType));
+        values.push(
+          isBitPresent(bitmap, i) ? decodeAnyCompositeValue(ctx, r, subType) : nullValue(subType),
+        );
       }
       const data: NebulaSet = { values: values as readonly NebulaValue[] };
       return { type: ColumnType.Set, isNull: false, data };

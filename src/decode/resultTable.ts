@@ -147,6 +147,17 @@ export class ResultTable {
     return this.columnTypeSchemas.map((s) => s.type);
   }
 
+  /** Total row count across all batches, computed in O(numBatches) without
+   * consuming the iteration cursor (unlike iterating to completion). Safe to
+   * call before, during, or after iterating with next()/hasNext(). */
+  rowCountHint(): number {
+    let total = 0;
+    for (const batch of this.batches) {
+      total += batch.numRecords();
+    }
+    return total;
+  }
+
   private advanceToNonEmptyBatch(): boolean {
     for (;;) {
       if (this.batches.length === 0 || this.batchIndex >= this.numBatches) {
