@@ -259,3 +259,39 @@
 - git init commit + push 到 origin/main
 - npm login（如未登录）+ npm publish --access public（scoped包默认private，需要显式public）
 
+### 执行结果（2026-09-11）
+1. package.json 更新：name=`@mygraph/nebula-sdk`，repository.url指向MuYiYong/nebula-typescript，
+   保留dual ESM+CJS构建，README/API.md安装示例同步更新为`@mygraph/nebula-sdk`
+2. 密码泄露检查：progress.md里有一处元描述("真实密码 Nebula123 已替换为...")意外包含了明文密码本身，
+   已修正为不含密码的描述，重新扫描确认全部tracked文件干净
+3. git commit + push 成功：68个文件，origin/main（https://github.com/MuYiYong/nebula-typescript.git），
+   推送前用gh repo view确认远程仓库为空，避免冲突
+4. npm publish 首次尝试遇到2FA拦截（先是OTP要求，后是browser-based auth要求），用户在本机完成浏览器
+   认证后重试成功，v0.1.0发布上线
+5. **发布后清水房验证发现真实bug**：全新 `npm install @mygraph/nebula-sdk` 后 require/import 都报
+   `Cannot find module '@bufbuild/protobuf'`。根因：ts-proto生成的代码在运行时import `@bufbuild/protobuf/wire`
+   （BinaryReader/BinaryWriter），但这个包只是通过ts-proto的间接依赖存在于本地node_modules（属于
+   devDependency链路），从未被声明进package.json的dependencies，本地测试因为node_modules缓存命中
+   而未暴露，发布后清水房安装才暴露
+6. 版本处理：与用户确认后改为0.1.1（而非unpublish重发0.1.0），因为0.1.0已发布，unpublish属于
+   破坏性操作且新包72小时内虽允许但仍有CDN缓存残留风险，patch版本号更符合语义化版本规范
+7. 顺带修复：`npm audit`发现`@grpc/grpc-js` 1.13.0-1.13.4 有high severity漏洞（畸形请求可致服务
+   崩溃，CVE-2026-48068），这是运行时依赖（非devDep），已升级到修复版本1.14.4。升级后
+   `npm audit --omit=dev` 显示0 vulnerabilities（其余8个漏洞全部只存在于devDependencies，
+   不影响发布产物）
+8. 修复后完整验证：49单测+19集成测试+tsc+eslint全部通过；`npm publish --dry-run`确认0.1.1内容正确；
+   `npm publish --access public` 成功（未再要求OTP，浏览器会话仍有效）；清水房重新安装
+   `@mygraph/nebula-sdk@0.1.1` 验证：CJS require()和ESM import()都正确加载，`npm audit`零漏洞，
+   且实际连接真实NebulaGraph 5.3实例执行查询成功返回正确结果
+9. 清理：删除 /tmp/verify-nebula-sdk 清水房验证目录（两次，含验证脚本）
+
+### 最终发布状态
+- **npm**: `@mygraph/nebula-sdk@0.1.1`（`0.1.0`因缺失运行时依赖bug保留在registry历史中未unpublish，
+  npm dist-tags.latest已指向0.1.1）
+- **GitHub**: https://github.com/MuYiYong/nebula-typescript（main分支，已推送初始commit，
+  package.json版本更新还需要一次追加commit——见下方TODO）
+
+### 待完成
+- 需要把package.json的version=0.1.1和@bufbuild/protobuf依赖修复、@grpc/grpc-js版本升级
+  提交并推送到GitHub（当前这些改动只发布到了npm，还没同步commit到git仓库）
+
