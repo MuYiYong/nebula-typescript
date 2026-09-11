@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-09-11
+
+### Fixed
+
+- `src/generated/` (the ts-proto output for `common.proto`/`graph.proto`/`vector.proto`) was
+  gitignored, so it was never actually present in a fresh checkout of this repository —
+  typecheck/build/test only ever worked locally because it had been generated once and never
+  deleted. This broke the `v0.1.3` publish workflow's `npm run typecheck` step with dozens of
+  "Cannot find module" errors before it ever reached `npm publish` (no `0.1.3` package was
+  published). Committed the generated output directly (444KB, 4 files) instead of adding
+  `protoc` as a CI dependency, since these files change only when the upstream `.proto`
+  definitions change. `npm run proto:gen` remains available for regenerating them locally.
+
 ## [0.1.3] - 2026-09-11
 
 ### Fixed
@@ -105,6 +118,7 @@ Initial release.
 - TLS support (one-way and mutual TLS, plus an `insecureSkipVerify` escape hatch for testing).
 - Dual ESM + CommonJS package output with bundled TypeScript declarations.
 
+[0.1.4]: https://github.com/MuYiYong/nebula-typescript/releases/tag/v0.1.4
 [0.1.3]: https://github.com/MuYiYong/nebula-typescript/releases/tag/v0.1.3
 [0.1.2]: https://github.com/MuYiYong/nebula-typescript/releases/tag/v0.1.2
 [0.1.1]: https://github.com/MuYiYong/nebula-typescript/releases/tag/v0.1.1
