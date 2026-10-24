@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-10-24
+
+### Security
+
+- Upgraded `@grpc/grpc-js` to 1.14.6 (fixes GHSA-m9gg-hp2v-232j and GHSA-f596-whhp-79r4).
+- Upgraded dev dependencies (`vitest` 5, `vite` 7, `eslint` 9.39, `@types/node` 22.19) to clear
+  advisories in `tinypool`, `esbuild`, `source-map-js`, `brace-expansion` and `@eslint/plugin-kit`.
+  `npm audit` now reports 0 vulnerabilities.
+
 ## [0.1.4] - 2026-09-11
 
 ### Fixed
